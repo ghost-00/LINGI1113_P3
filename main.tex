@@ -100,7 +100,7 @@ Pour finir nous avons implémenté la structure \texttt{pid\_s} que nous avons p
 \newpage
 \section{Projet principal}
 
-Comme demandé, nous avons fait une copie du fichier /src/commands/mount/mount.c que nous avons modifié et placé dans le dossier test afin de lui rajouter l'option \texttt{-e}, en initialisant la variable \texttt{mountflags} à \texttt{MS\_CRYPT} défini dans le fichier \texttt{/src/include/sys/mount.h}, lorsque l'utilisateur utilise \texttt{mount} avec l'option \texttt{-e}. \\
+Comme demandé, nous avons fait une copie du fichier /src/commands/mount/mount.c que nous avons modifié et placé dans le dossier test pour pouvoir l'utiliser pour monter des disques cryté. Pour ce faire, une nouvelle comparaison a été ajoutée dans le \texttt{case} afin de vérifier si \texttt{-e} a été saisi par l'utilisateur. Si il a été saisi, un \texttt{OR Logique} est appliqué sur la variable \texttt{mountflags} pour que l'on puisse retrouver si cette option a été activée dans d'autres fichiers de Minix. Cette variable sert aussi notamment a savoir si le disque est monter en mode lecture seule ou non.
 
 Lors de la réalisation de notre projet nous avons dû faire face à quelques problèmes. Premièrement on s'est posé des questions concernant la gestion de clé : car on avait le choix entre faire confiance à l'utilisateur et lui laisser entrer la clé ou attribuer une clé à chaque \texttt{FS} que l'on stockerait dans chaque \texttt{superblock} que chaque \texttt{FS} possède afin d'y stocker des informations spécifiques à chaque \texttt{FS}.  Ensuite, il a du choisir entre crypter le buffer dans le \texttt{MFS} ou dans le \texttt{VFS} car c'est deux solutions solutions était toutes deux correctes mais l'une entre elle avait un avantage sur l'autre.\\   
 
@@ -117,6 +117,13 @@ Avant d'implémenter notre solution nous avions tout d'abord compris que le \tex
 \end{figure}
      
 Le \texttt{VFS} accède à l'implémentation des \texttt{FS} à travers des pointeurs de fonctions et communique avec eux grâce aux \texttt{message}. \\
+
+Pour que notre système de cryptage/décryptage fonctionne avec tous les \texttt{FS}, nous avons décidé de l'implémenter dans \texttt{VFS}. En effet, nous avons mis notre code dans le fichier \texttt{read.c} de \texttt{VFS} dans la méthode \texttt{read\_write}. Cette méthode fait appel à une requête pour pouvoir appeler le  \texttt{FS} correspondant au disque monté et lire la partie du fichier voulue. Cette méthode permettant à la fois de lire et d'écrire dans un fichier, le cryptage/décryptage se situe à différents endroit :
+
+\begin{itemize}
+\item Lecture dans un fichier : ici il faut intercepter le buffer, après que le \texttt{FS} ai fait son boulot, grâce à \texttt{sys\_datacopy}, ensuite il suffit de le décrypter et de renvoyer cette nouvelle version au processus utilisateur.
+\item Ecrite dans un fichier : dans ce cas-ci, il faut intercepter le buffer qui est passé au \texttt{FS} et qui contient le contenu de ce que l'on veut écrire dans le fichier pour pouvoir le crypter. Pour ce faire, on utilise la fonction \texttt{sys\_datacopy}, qui permet de récuperer les données contenu dans l'espace utilsateur, et on applique notre méthode de cryptage sur ce contenu. Nous discuterons plus loin de la méthode utilisé pour le cryptage/décryptage.
+\end{itemize}
 
 \subsection{Gestion de la clé}
 
