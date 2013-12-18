@@ -116,7 +116,7 @@ Avant d'implémenter notre solution nous avions tout d'abord compris que le \tex
 \end{center}
 \end{figure}
      
-Le \texttt{VFS} accède à l'implémentation des \texttt{FS} à travers des pointeurs de fonctions et communique avec eux grâce aux \texttt{message}. \\
+Le \texttt{VFS} accède à l'implémentation des \texttt{FS} à travers des requêtes vers des fonctions et communique avec eux grâce aux \texttt{message}. \\
 
 Pour que notre système de cryptage/décryptage fonctionne avec tous les \texttt{FS}, nous avons décidé de l'implémenter dans \texttt{VFS}. En effet, nous avons mis notre code dans le fichier \texttt{read.c} de \texttt{VFS} dans la méthode \texttt{read\_write}. Cette méthode fait appel à une requête pour pouvoir appeler le  \texttt{FS} correspondant au disque monté et lire la partie du fichier voulue. Cette méthode permettant à la fois de lire et d'écrire dans un fichier, le cryptage/décryptage se situe à différents endroit :
 
@@ -129,7 +129,26 @@ Pour que notre système de cryptage/décryptage fonctionne avec tous les \texttt
 
 Nous avons choisi de demander la clé à l'utilisateur et non d'enregistrer la clé dans le \texttt{superblock} car la modification de ce dernier est fort complexe. Ainsi dans la fonction \texttt{mount} du fichier \texttt{/src/lib/libc/other/\_mount.c} on teste d'abord le \texttt{mountflag} et si la valeur contenue est \texttt{MS\_CRYPT}, on alloue de l'espace pour la clé de cryptage que l'on demande via un \texttt{scanf}. Ensuite on ne savait pas trop comment intégrer cette clé dans le \texttt{message} afin que le \texttt{VFS} puisse l'utiliser, étant donnée qu'il n'y avait plus de sous-variable dans le structure \texttt{message} pour la contenir. Face à ce problème nous avons donc décidé d'ajouter une sous-variable \texttt{char *m1p4} de la structure \texttt{mess\_1} défini dans le fichier \texttt{/src/include/minix/ipc.h}. Et suite à cette modification de la structure \texttt{mess\_1}, on a pu transférer la clé provenant de l'espace utilisateur au \texttt{VFS}. Enfin étant donnée que l'on était incapable de manipuler le \texttt{superblock}, on a décider pour la suite d'enregistrer la clé dans la structure \texttt{vmnt} qui stocke les informations relative à la partition attachée. Ainsi nous avons modifié cette structure en ajoutant une nouvelle sous-variable afin de contenir la clé du cryptage.     
 
+\subsection{Encodage dans les fichiers}
 
+La méthode de cryptage/décryptage fournie utilise des blocs de 8 bytes, nous avons donc du tenir compte de cette restriction lors de l'implémentation de notre programme. Le contenu que l'on souhaite écrire dans un fichier, qu'il soit crypté ou non, est rarement un multiple de 8. Par conséquent, nous devons compléter le contenu avec des caractères quelconque afin de pouvoir le crypter, mais en faisant cette opération nous devons aussi nous souvenir de combien de caractères nous avons du ajouter. Nous avons décidé de palier à ce problème en écrivant dans tout les fichiers cryptés un bloc de 8 bytes contenant le nombre de caractère qui restait dans le dernier bloc de 8 bytes avant de devoir le compléter. Ce bloc sera inséré au début du fichier crypté dés le début de l'écriture. Lorsqu'on écrira quelque chose à la suite d'un fichier, ce bloc sera mis à jour. Lors de la lecture d'un fichier crypté, ce bloc est la première chose lue pour pouvoir déterminer combien de caractères doivent être retiré à la fin.
+L'écriture ou la lecture dans un fichier crypté est alors assez trivial, il suffit de diviser le contenu à écrire/lire en block de 8 et le crypter/décrypter en complétant éventuellement le dernier bloc si celui-ci n'est pas complet.
+
+\subsection{Cryptage}
+
+Nous avons utilisé l'interface fournie sur foditic pour réaliser l'encryption TEA. Elle prend comme paramètres une clé et deux chaines de caractères de 8 octets.
+
+\subsection{Limite de notre programme}
+
+Notre programme, de par son implémentation, présente certaines limites d'utilisation, nous allons les détailler ici :
+\subsubsection{Ecriture en clair dans un fichier crypté}
+
+Notre implémentation nous impose d'écrire un bloc de 8 bytes au début d'un fichier crypté pour savoir combien de bytes ont été ajouté à la fin pour arriver à un multiple de 8. Du fait de ces 8 bytes, notre implémentation ne nous permet pas de pouvoir écrire à la suite d'un fichier crypté en clair ou d'écrire du contenu crypté à la suite d'un fichier contenant déjà du texte non crypté car dans ces cas ce bloc de 8 bytes ne représente plus la réalité ou ne sait pas être écrit au début du fichier.
+Une piste de solution pourrait être que chaque bloc de 8 bytes écrit dans un fichier (en clair ou crypté) comportent le nombre de bytes qui ont du éventuellement être rajouté à la fin pour arriver à 8 bytes et si ce nombre vaut 0 le fichier est en clair et si il vaut 9 le fichier est crypté par exemple. Néanmoins, cette méthode rendrait le fichier tel qu'il est physiquement sur le disque assez différent du fichier tel qu'il est affiché sur l'écran et augmenterait considérablement la taille des fichiers.
+\subsubsection{Certains problèmes d'affichage}
+
+Pour des raisons assez obscures, Minix augmente la taille des fichiers de temps en temps. De fait, lorsque l'on affiche sur l'écran le contenu d'un fichier Minix s'attend à afficher beaucoup plus de caractères que prévu et donc certains caractères indésirables apparaissent à la fin du contenu. Ce problème est plutôt aléatoire et nous n'avons pas réussi à lui trouver une cause, nous avons tenté d'insérer dans le premier bloc de 8 bytes une champ avec la taille du fichier mais étant donné que la méthode \texttt{read\_write} est appelé plusieurs fois pour une même lecture/écriture cette valeur ne représentait plus la taille réelle du fichier.
+A côté de cela, nous avons de temps en temps certains malloc qui provoque un kernel panic dans le VFS.
 
 
 
