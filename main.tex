@@ -100,9 +100,7 @@ Pour finir nous avons implémenté la structure \texttt{pid\_s} que nous avons p
 \newpage
 \section{Projet principal}
 
-Comme demandé, nous avons fait une copie du fichier /src/commands/mount/mount.c que nous avons modifié et placé dans le dossier test pour pouvoir l'utiliser pour monter des disques cryté. Pour ce faire, une nouvelle comparaison a été ajoutée dans le \texttt{case} afin de vérifier si \texttt{-e} a été saisi par l'utilisateur. Si il a été saisi, un \texttt{OR Logique} est appliqué sur la variable \texttt{mountflags} pour que l'on puisse retrouver si cette option a été activée dans d'autres fichiers de Minix. Cette variable sert aussi notamment a savoir si le disque est monter en mode lecture seule ou non.
-
-Lors de la réalisation de notre projet nous avons dû faire face à quelques problèmes. Premièrement on s'est posé des questions concernant la gestion de clé : car on avait le choix entre faire confiance à l'utilisateur et lui laisser entrer la clé ou attribuer une clé à chaque \texttt{FS} que l'on stockerait dans chaque \texttt{superblock} que chaque \texttt{FS} possède afin d'y stocker des informations spécifiques à chaque \texttt{FS}.  Ensuite, il a du choisir entre crypter le buffer dans le \texttt{MFS} ou dans le \texttt{VFS} car c'est deux solutions solutions était toutes deux correctes mais l'une entre elle avait un avantage sur l'autre.\\   
+Le but du projet Minix de cette année était de faire un système transparant de cryptage/décryptage de fichier qui s'active lorsque l'on monte une partition avec une certaines options. Nous allons discuter ici de nos choix d'implémentations, de l'architecture globale de notre projet et des limites de notre programme.\\   
 
 \subsection{Architecture}
 
@@ -124,6 +122,13 @@ Pour que notre système de cryptage/décryptage fonctionne avec tous les \texttt
 \item Lecture dans un fichier : ici il faut intercepter le buffer, après que le \texttt{FS} ai fait son boulot, grâce à \texttt{sys\_datacopy}, ensuite il suffit de le décrypter et de renvoyer cette nouvelle version au processus utilisateur.
 \item Ecrite dans un fichier : dans ce cas-ci, il faut intercepter le buffer qui est passé au \texttt{FS} et qui contient le contenu de ce que l'on veut écrire dans le fichier pour pouvoir le crypter. Pour ce faire, on utilise la fonction \texttt{sys\_datacopy}, qui permet de récuperer les données contenu dans l'espace utilsateur, et on applique notre méthode de cryptage sur ce contenu. Nous discuterons plus loin de la méthode utilisé pour le cryptage/décryptage.
 \end{itemize}
+
+\subsection{Commande mount}
+
+Nous avons du modifier le fichier \texttt{mount} de minix, qui permet de monter une partition, afin qu'il prenne en compte un nouveau paramètre qui est le \texttt{-e}. Si le \texttt{-e} est mis lorsqu'un partition est montée ça avertira Minix que les fichiers doivent être crypté/décrypté.
+Nous avons fait une copie du fichier \texttt{mount} original et nous l'avons mis dans le répertoire \texttt{/test} de Minix en le modifiant au préalable.
+Pour stocker le fait qu'une partition soit montée en mode crypté nous avons utilisé la même technique que le \texttt{readonly}, à savoir nous faisons un \texttt{OR Logique} sur la variable \texttt{mountflags} de \texttt{mount.c} avec une nouvelle constante créé pour l'occasion qui s'appelle \texttt{MS\_CRYPT} et qui est déclaré dans le fichier \texttt{include/sys/mount.h}. Nous lui donnons comme valeur \texttt{0x008} en hexadécimal.
+Le fait de faire un \texttt{OR Logique} et de lui donner une telle valeur permet à la variable \texttt{mountflags} de comporter plusieurs informations. En effet, elle peut à la fois savoir si la partition est en \texttt{readonly} et si la partition est crypté ou non. Pour retrouver ces valeurs, il suffit de faire un \texttt{ET Logique} dessus avec les variables définies dans \texttt{include/sys/mount.h}
 
 \subsection{Gestion de la clé}
 
